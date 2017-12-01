@@ -1,18 +1,43 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
 using System.Text;
 using System.Xml;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.UI;
 
 
-public class WSGame : MonoBehaviour {
+public class WSGame : MonoBehaviour
+{
 
+    [SerializeField]
+    public InputField usuarioField = null;
+
+    [SerializeField]
+    public InputField claveField = null;
+
+    [SerializeField]
+    private Text feedback = null;
+
+    [SerializeField]
+    private Toggle rememberData = null;
 
     public delegate void WSResponse(string response);
     public static WSGame instance;
-    private string WS_URL = "http://localhost:8080/ServiceWeb/rest/usuario/login?correo=correo1&clave=123";
 
+    void Start()
+    {
+
+        if (PlayerPrefs.HasKey("remember") && PlayerPrefs.GetInt("remember") == 1)
+        {
+            usuarioField.text = PlayerPrefs.GetString("rememberLogin");
+            claveField.text = PlayerPrefs.GetString("rememberPass");
+        }
+
+    }
 
     void Awake()
     {
@@ -28,100 +53,101 @@ public class WSGame : MonoBehaviour {
     }
 
 
-   public void StartWebService(string endpoint, WSResponse successCallback, WSResponse errorCallback = null)
+
+
+    public void StartWebService(WSResponse successCallback)
     {
-        StartCoroutine(GetText(endpoint, successCallback, errorCallback));
+        StartCoroutine(GetText(successCallback));
     }
-    
 
 
-    IEnumerator GetText(string comentario, WSResponse successCallback = null, WSResponse errorCallback = null)
+
+    public IEnumerator GetText(WSResponse successCallback = null)
     {
-        using (UnityWebRequest www = UnityWebRequest.Get(WS_URL + WWW.EscapeURL(comentario)))
+        UnityWebRequest webRequest = UnityWebRequest.Get(
+
+       "localhost:8080/ServiceWeb/rest/usuario/login?correo=" + usuarioField.text + "&clave=" + claveField.text
+
+        );
+        yield return webRequest.Send();
+
+        if (!webRequest.isNetworkError)
         {
-#if UNITY_5_5_4 || UNITY_5_6_OR_NEWER
-            www.timeout = 20;
-#endif
-            UTF8Encoding encoder = new UTF8Encoding();
-            www.uploadHandler = (UploadHandler)new UploadHandlerRaw(encoder.GetBytes(comentario));
-            www.downloadHandler = (DownloadHandler)new DownloadHandlerBuffer();
-            www.SetRequestHeader("Content-Type", "application/json");
+
+            RootObject rs = JsonUtility.FromJson<RootObject>(
+
+                webRequest.downloadHandler.text
+
+            );
 
 
-            yield return www.Send();
+            Debug.Log(rs.nombre_personaje);
+            Debug.Log(rs.nombre_usuario);
+            if (successCallback != null) successCallback(webRequest.downloadHandler.text);
 
-            if (www.isNetworkError || www.isHttpError)
-            {
-                Debug.Log(www.error);
-                if (errorCallback != null) errorCallback(www.error);
-            }
-            else
-            {
-                // Show results as text
-                Debug.Log(www.downloadHandler.text.Trim());
-                // Or retrieve results as binary data
-                byte[] results = www.downloadHandler.data;
-                Debug.Log(results);
-
-                if (successCallback != null) successCallback(www.downloadHandler.text);
-            }
+        }
+        else
+        {
+            Debug.Log(webRequest.error);
         }
     }
 
+    public void mandar()
+    {
+        WSGame.instance.StartWebService(resultados);
+
+        string usuario = usuarioField.text;
+
+        string clave = claveField.text;
+
+       
+
+        if (rememberData.isOn)
+        {
+            PlayerPrefs.SetInt("remember", 1);
+            PlayerPrefs.SetString("rememberLogin", usuario);
+            PlayerPrefs.SetString("rememberPass", clave);
+        }
+
+    }
+
+    private void Fallo(string response)
+    {
+        feedback.CrossFadeAlpha(100f, 0f, false);
+        feedback.color = Color.red;
+        feedback.text = "Ha ocurrido un error en la conexion\nIntente de nuevo";
+    }
+
+    public void resultados(string response)
+    {
+
+        
+        Debug.Log(response);
+        if (response != "{}")
+        {
+
+            feedback.CrossFadeAlpha(100f, 0f, false);
+            feedback.color = Color.green;
+            feedback.text = "Se ha logeado correctamente\nCargando juego....";
+            //StartCoroutine(CargarEscena());
+        }
+
+        else
+        {
+            feedback.CrossFadeAlpha(100f, 0f, false);
+            feedback.color = Color.red;
+            feedback.text = "No se ha logeado correctamente\nIntente de nuevo";
+        }
 
 
 
+    }
 
-
-
-
-
-
-
-
-    /*  private IEnumerator ConsumeWebService(string json, WSResponse successCallback = null,WSResponse errorCallback = null)
-      {
-          string url = Go_URL ;
-
-          Debug.Log("Sending JSON: " + json);
-          Debug.Log("To URL: " + url);
-
-          using (UnityWebRequest www = new UnityWebRequest(url, "POST"))
-          {
-  #if UNITY_5_5_4 || UNITY_5_6_OR_NEWER
-              www.timeout = 20;
-  #endif
-              UTF8Encoding encoder = new UTF8Encoding();
-              www.uploadHandler = (UploadHandler)new UploadHandlerRaw(encoder.GetBytes(json));
-              www.downloadHandler = (DownloadHandler)new DownloadHandlerBuffer();
-              www.SetRequestHeader("Content-Type", "application/json");
-
-              yield return www.Send();
-
-              if (www.isNetworkError)
-              {
-                  Debug.Log(www.error);
-                  if (errorCallback != null) errorCallback(www.error);
-
-              }
-              else
-              {
-                  string responseString = www.downloadHandler.text.Trim();
-                  Debug.Log("responseString " + responseString);
-
-                  if (www.downloadHandler.text == null)
-                  {
-                      if (errorCallback != null) errorCallback("www.downloadHandler.text is " + www.downloadHandler.text);
-
-                  }
-                  else
-                  {
-                      if (successCallback != null) successCallback(www.downloadHandler.text.Trim());
-
-
-                  }
-              }
-          }
-      }*/
+   /* IEnumerator CargarEscena()
+    {
+        yield return new WaitForSeconds(5);
+        Application.LoadLevel("");
+        
+    }*/ 
 
 }
